@@ -3,17 +3,29 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  }
+})
 
 export async function signInWithGoogle() {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${window.location.origin}/auth/callback`
-    }
+      redirectTo: 'https://blogs.charanfolio.me',
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
+    },
   })
+
   if (error) throw error
 }
+
 
 export async function signOut() {
   const { error } = await supabase.auth.signOut()
@@ -70,9 +82,10 @@ export async function getPostStats(postSlug) {
       id,
       content,
       created_at,
-      profiles:user_id (
-        email:auth.users!id(email),
-        user_metadata:auth.users!id(raw_user_meta_data)
+      user_id,
+      user:user_id (
+        email,
+        raw_user_meta_data
       )
     `)
     .eq('post_slug', postSlug)
