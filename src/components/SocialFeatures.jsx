@@ -9,6 +9,9 @@ function SocialFeatures({ postSlug }) {
   const [isCommenting, setIsCommenting] = useState(false)
   const [comment, setComment] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [hasLiked, setHasLiked] = useState(false)
+  const [isLikeAnimating, setIsLikeAnimating] = useState(false)
+  const [commentSuccess, setCommentSuccess] = useState(false)
 
   useEffect(() => {
     // Get initial auth state
@@ -59,7 +62,7 @@ function SocialFeatures({ postSlug }) {
     try {
       const { data: likes } = await supabase
         .from('likes')
-        .select('id')
+        .select('id, user_id')
         .eq('post_slug', postSlug)
 
       const { data: comments } = await supabase
@@ -68,9 +71,10 @@ function SocialFeatures({ postSlug }) {
           id,
           content,
           created_at,
+          user_id,
           user:user_id (
             email,
-            user_metadata
+            raw_user_meta_data
           )
         `)
         .eq('post_slug', postSlug)
@@ -80,6 +84,11 @@ function SocialFeatures({ postSlug }) {
         likesCount: likes?.length || 0,
         comments: comments || []
       })
+
+      // Check if current user has liked the post
+      if (user) {
+        setHasLiked(likes?.some(like => like.user_id === user.id) || false)
+      }
     } catch (error) {
       console.error('Error fetching stats:', error)
     }
@@ -88,7 +97,10 @@ function SocialFeatures({ postSlug }) {
   const handleLike = async () => {
     if (!user) return
     try {
+      setIsLikeAnimating(true)
       await likePost(postSlug)
+      setHasLiked(!hasLiked)
+      setTimeout(() => setIsLikeAnimating(false), 1000)
     } catch (error) {
       console.error('Error liking post:', error)
     }
@@ -103,6 +115,8 @@ function SocialFeatures({ postSlug }) {
       await addComment(postSlug, comment.trim())
       setComment('')
       setIsCommenting(false)
+      setCommentSuccess(true)
+      setTimeout(() => setCommentSuccess(false), 3000)
     } catch (error) {
       console.error('Error adding comment:', error)
     } finally {
@@ -124,14 +138,29 @@ function SocialFeatures({ postSlug }) {
   return (
     <div className="mt-8 border-t border-gray-200 dark:border-gray-700/50 pt-8">
       <div className="flex items-center gap-6">
-        <button
+        <motion.button
           onClick={handleLike}
-          className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-accent dark:hover:text-accent transition-colors"
+          whileTap={{ scale: 0.9 }}
+          className={`flex items-center gap-2 ${
+            hasLiked 
+              ? 'text-red-500' 
+              : 'text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-500'
+          } transition-colors`}
           disabled={!user}
         >
-          <FiHeart className="w-5 h-5" />
+          <motion.div
+            animate={isLikeAnimating ? {
+              scale: [1, 1.5, 1],
+              rotate: [0, 15, -15, 0],
+            } : {}}
+            transition={{ duration: 0.5 }}
+          >
+            <FiHeart
+              className={`w-5 h-5 ${hasLiked ? 'fill-current' : ''}`}
+            />
+          </motion.div>
           <span>{stats.likesCount}</span>
-        </button>
+        </motion.button>
         <button
           onClick={() => setIsCommenting(!isCommenting)}
           className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-accent dark:hover:text-accent transition-colors"
@@ -147,6 +176,19 @@ function SocialFeatures({ postSlug }) {
           <span>Share</span>
         </button>
       </div>
+
+      <AnimatePresence>
+        {commentSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="mt-4 p-4 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg"
+          >
+            Comment posted successfully!
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {isCommenting && (
@@ -173,13 +215,15 @@ function SocialFeatures({ postSlug }) {
                   >
                     Cancel
                   </button>
-                  <button
+                  <motion.button
                     type="submit"
                     disabled={isSubmitting || !comment.trim()}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                     className="px-4 py-2 text-sm font-medium bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
                   >
                     {isSubmitting ? 'Posting...' : 'Post Comment'}
-                  </button>
+                  </motion.button>
                 </div>
               </form>
             ) : (
@@ -192,27 +236,38 @@ function SocialFeatures({ postSlug }) {
       </AnimatePresence>
 
       {stats.comments.length > 0 && (
-        <div className="mt-8 space-y-6">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mt-8 space-y-6"
+        >
           <h3 className="text-lg font-semibold">Comments</h3>
           {stats.comments.map((comment) => (
-            <div key={comment.id} className="border-b border-gray-200 dark:border-gray-700/50 last:border-0 pb-6">
+            <motion.div
+              key={comment.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="border-b border-gray-200 dark:border-gray-700/50 last:border-0 pb-6"
+            >
               <div className="flex items-center gap-3 mb-2">
                 <img
-                  src={comment.user.user_metadata.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.user.user_metadata.full_name || comment.user.email)}`}
-                  alt={comment.user.user_metadata.full_name || comment.user.email}
+                  src={comment.user.raw_user_meta_data.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.user.raw_user_meta_data.full_name || comment.user.email)}`}
+                  alt={comment.user.raw_user_meta_data.full_name || comment.user.email}
                   className="w-8 h-8 rounded-full"
                 />
                 <div>
-                  <div className="font-medium">{comment.user.user_metadata.full_name || comment.user.email}</div>
+                  <div className="font-medium">
+                    {comment.user.raw_user_meta_data.full_name || comment.user.email}
+                  </div>
                   <div className="text-sm text-gray-500 dark:text-gray-400">
                     {new Date(comment.created_at).toLocaleDateString()}
                   </div>
                 </div>
               </div>
               <p className="text-gray-600 dark:text-gray-300">{comment.content}</p>
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
     </div>
   )
